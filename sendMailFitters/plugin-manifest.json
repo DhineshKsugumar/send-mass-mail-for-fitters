@@ -1,3 +1,13 @@
 {
-  "service": "CRM"
+  "service": "CRM",
+  "cspDomains": {
+    "connect-src": [
+      "https://js.zohostatic.com",
+      "https://*.zoho.com",
+      "https://*.zoho.eu"
+    ],
+    "script-src": [
+      "https://js.zohostatic.com"
+    ]
+  }
 }

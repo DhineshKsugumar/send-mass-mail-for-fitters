@@ -1,9 +1,426 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Send Mass Mail</title>
+    <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        background-color: #f5f7fa;
+        padding: 20px;
+      }
+      
+      .email-container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        overflow: hidden;
+      }
+      
+      .recipient-info {
+        padding: 16px 30px;
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #e1e4e8;
+        font-size: 14px;
+        color: #586069;
+      }
+      
+      .recipient-info strong {
+        color: #24292e;
+      }
+      
+      .email-form {
+        padding: 30px;
+      }
+      
+      .form-group {
+        margin-bottom: 24px;
+      }
+      
+      .form-label {
+        display: block;
+        font-size: 14px;
+        font-weight: 600;
+        color: #24292e;
+        margin-bottom: 8px;
+      }
+      
+      .form-input {
+        width: 100%;
+        padding: 12px 16px;
+        font-size: 15px;
+        border: 2px solid #e1e4e8;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+        font-family: inherit;
+      }
+      
+      .form-input:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      }
+      
+      .form-textarea {
+        min-height: 300px;
+        resize: vertical;
+        line-height: 1.6;
+      }
+      
+      .char-counter {
+        text-align: right;
+        font-size: 12px;
+        color: #6a737d;
+        margin-top: 6px;
+      }
+      
+      .email-actions {
+        padding: 20px 30px;
+        background-color: #f8f9fa;
+        border-top: 1px solid #e1e4e8;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .btn {
+        padding: 12px 28px;
+        font-size: 15px;
+        font-weight: 600;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-family: inherit;
+      }
+      
+      .btn-primary {
+        background: #1e7e34;
+        color: white;
+      }
+      
+      .btn-primary:hover {
+        background: #155d27;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(30, 126, 52, 0.4);
+      }
+      
+      .btn-primary:active {
+        transform: translateY(0);
+      }
+      
+      .btn-primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+      
+      .btn-secondary {
+        background: #e1e4e8;
+        color: #24292e;
+      }
+      
+      .btn-secondary:hover {
+        background: #d1d5da;
+      }
+      
+      .status-message {
+        font-size: 14px;
+        color: #6a737d;
+        font-style: italic;
+      }
+      
+      .status-message.success {
+        color: #28a745;
+      }
+      
+      .status-message.error {
+        color: #dc3545;
+      }
+      
+      /* Loading state */
+      .loading {
+        opacity: 0.6;
+        pointer-events: none;
+      }
+      
+      .spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-radius: 50%;
+        border-top-color: white;
+        animation: spin 0.6s linear infinite;
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
   </head>
   <body>
-    <h2>This is a sample Widget built using Zoho Extension toolkit.</h2>
+    <div class="email-container">
+      <div class="recipient-info">
+        <strong>Recipients:</strong> <span id="recipientCount">Loading...</span>
+      </div>
+      
+      <form class="email-form" id="emailForm">
+        <div class="form-group">
+          <label class="form-label" for="emailSubject">Subject</label>
+          <input 
+            type="text" 
+            id="emailSubject" 
+            class="form-input" 
+            placeholder="Enter email subject..."
+            required
+          >
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label" for="emailMessage">Message</label>
+          <textarea 
+            id="emailMessage" 
+            class="form-input form-textarea" 
+            placeholder="Type your message here..."
+            required
+          ></textarea>
+          <div class="char-counter">
+            <span id="charCount">0</span> characters
+          </div>
+        </div>
+      </form>
+      
+      <div class="email-actions">
+        <div class="status-message" id="statusMessage"></div>
+        <div>
+          <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="sendBtn" form="emailForm">
+            Send Email
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Global variables
+      let entityIds = [];
+      let entityType = '';
+      
+      // Wait for ZOHO SDK to load
+      async function waitForZohoSDK(maxAttempts = 50, interval = 100) {
+        for (let i = 0; i < maxAttempts; i++) {
+          if (typeof ZOHO !== 'undefined') {
+            console.log(`✅ ZOHO SDK loaded after ${(i + 1) * interval}ms`);
+            return true;
+          }
+          await new Promise(resolve => setTimeout(resolve, interval));
+        }
+        console.log('❌ ZOHO SDK not available after maximum attempts');
+        return false;
+      }
+      
+      // Initialize Zoho CRM
+      async function initializeZohoCRM() {
+        try {
+          console.log('🚀 Initializing Zoho CRM SDK...');
+          
+          // Wait for ZOHO object to be available
+          const sdkAvailable = await waitForZohoSDK();
+          
+          if (!sdkAvailable) {
+            console.error('❌ ZOHO SDK not available');
+            updateRecipientCount('Error: SDK not available', true);
+            return;
+          }
+          
+          console.log('✅ ZOHO object found, setting up embedded app...');
+          
+          // Subscribe to PageLoad event BEFORE initializing
+          ZOHO.embeddedApp.on("PageLoad", function(data) {
+            console.log('📦 PageLoad event triggered:', data);
+            
+            if (data && data.EntityId) {
+              entityType = data.Entity || '';
+              
+              // Handle both single and multiple entity IDs
+              if (Array.isArray(data.EntityId)) {
+                entityIds = data.EntityId;
+              } else {
+                entityIds = [data.EntityId];
+              }
+              
+              console.log('✅ Captured Entity IDs:', entityIds);
+              console.log('✅ Entity Type:', entityType);
+              
+              // Update recipient count
+              const count = entityIds.length;
+              const label = count === 1 ? 'Fitter' : 'Fitters';
+              updateRecipientCount(`${count} ${label}`);
+            } else {
+              console.log('⚠️ No EntityId in PageLoad data');
+              updateRecipientCount('No recipients selected', true);
+            }
+          });
+          
+          // Initialize the SDK
+          await ZOHO.embeddedApp.init();
+          console.log('✅ Zoho CRM SDK initialized successfully');
+          
+        } catch (error) {
+          console.error('❌ Error initializing Zoho CRM SDK:', error);
+          updateRecipientCount('Error: ' + error.message, true);
+        }
+      }
+      
+      // Update recipient count display
+      function updateRecipientCount(text, isError = false) {
+        const countElement = document.getElementById('recipientCount');
+        countElement.textContent = text;
+        if (isError) {
+          countElement.style.color = '#dc3545';
+        } else {
+          countElement.style.color = '#28a745';
+        }
+      }
+      
+      // Update character counter
+      function updateCharCount() {
+        const message = document.getElementById('emailMessage').value;
+        document.getElementById('charCount').textContent = message.length;
+      }
+      
+      // Handle form submission
+      async function handleSubmit(event) {
+        event.preventDefault();
+        
+        const subject = document.getElementById('emailSubject').value.trim();
+        const message = document.getElementById('emailMessage').value.trim();
+        
+        if (!subject || !message) {
+          showStatus('Please fill in all fields', 'error');
+          return;
+        }
+        
+        if (entityIds.length === 0) {
+          showStatus('No recipients selected', 'error');
+          return;
+        }
+        
+        console.log('📧 Preparing to send email...');
+        console.log('Subject:', subject);
+        console.log('Message (original):', message);
+        console.log('Entity IDs:', entityIds);
+        console.log('Entity Type:', entityType);
+        
+        // Convert line breaks to <br> tags for HTML email
+        const messageWithBreaks = message.replace(/\n/g, '<br>');
+        console.log('Message (with breaks):', messageWithBreaks);
+        
+        // Convert entity IDs array to comma-separated string
+        const fitterIdsStr = entityIds.join(',');
+        console.log('Fitter IDs (comma-separated):', fitterIdsStr);
+        
+        // Disable the send button and show loading state
+        const sendBtn = document.getElementById('sendBtn');
+        const originalText = sendBtn.innerHTML;
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<span class="spinner"></span>Sending...';
+        
+        try {
+          // Call the Zoho CRM function
+          const funcName = 'sendMailToFitters';
+          const reqData = {
+            "arguments": JSON.stringify({
+              "fitter_ids": fitterIdsStr,
+              "subject_str": subject,
+              "message_str": messageWithBreaks
+            })
+          };
+          
+          console.log('🚀 Calling function:', funcName);
+          console.log('📦 Request data:', reqData);
+          
+          const response = await ZOHO.CRM.FUNCTIONS.execute(funcName, reqData);
+          
+          console.log('✅ Function response:', response);
+          
+          if (response.code === 'success') {
+            showStatus('Emails sent successfully!', 'success');
+            
+            // Clear the form after successful send
+            setTimeout(() => {
+              document.getElementById('emailSubject').value = '';
+              document.getElementById('emailMessage').value = '';
+              updateCharCount();
+            }, 2000);
+          } else {
+            showStatus('Failed to send emails: ' + (response.message || 'Unknown error'), 'error');
+          }
+          
+        } catch (error) {
+          console.error('❌ Error calling function:', error);
+          showStatus('Error: ' + error.message, 'error');
+        } finally {
+          // Re-enable the send button
+          sendBtn.disabled = false;
+          sendBtn.innerHTML = originalText;
+        }
+      }
+      
+      // Show status message
+      function showStatus(message, type = '') {
+        const statusElement = document.getElementById('statusMessage');
+        statusElement.textContent = message;
+        statusElement.className = 'status-message';
+        if (type) {
+          statusElement.classList.add(type);
+        }
+        
+        // Clear status after 5 seconds
+        setTimeout(() => {
+          statusElement.textContent = '';
+          statusElement.className = 'status-message';
+        }, 5000);
+      }
+      
+      // Handle cancel
+      function handleCancel() {
+        if (confirm('Are you sure you want to cancel? Your message will be lost.')) {
+          document.getElementById('emailSubject').value = '';
+          document.getElementById('emailMessage').value = '';
+          updateCharCount();
+          showStatus('Cancelled', '');
+        }
+      }
+      
+      // Initialize when DOM is ready
+      document.addEventListener('DOMContentLoaded', function() {
+        console.log('📄 DOM Content Loaded');
+        
+        // Initialize Zoho CRM
+        initializeZohoCRM();
+        
+        // Add event listeners
+        document.getElementById('emailMessage').addEventListener('input', updateCharCount);
+        document.getElementById('emailForm').addEventListener('submit', handleSubmit);
+        document.getElementById('cancelBtn').addEventListener('click', handleCancel);
+        
+        // Initialize character count
+        updateCharCount();
+      });
+    </script>
   </body>
 </html>
